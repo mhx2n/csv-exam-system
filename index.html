@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>CSV Exam System</title>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.3.2/papaparse.min.js"></script>
+  <style>
+    body { font-family: Arial; padding:20px; }
+    .wrong { background:#ffdddd; }
+    .correct { background:#ddffdd; }
+    .hidden { display:none; }
+  </style>
+</head>
+<body>
+
+<h2>Admin Panel - Upload CSV</h2>
+<input type="file" id="csvFile" accept=".csv">
+<br><br>
+
+<label>Filter by Section:</label>
+<select id="sectionFilter"></select>
+
+<label>Set Timer (minutes):</label>
+<input type="number" id="timerInput" value="10">
+
+<button onclick="startExam()">Start Exam</button>
+
+<hr>
+
+<div id="examArea" class="hidden"></div>
+<button id="submitBtn" class="hidden" onclick="submitExam()">Submit</button>
+
+<h3 id="result"></h3>
+<button id="exportBtn" class="hidden" onclick="exportResult()">Export Result CSV</button>
+
+<script>
+
+let questions = [];
+let filteredQuestions = [];
+let userAnswers = {};
+let timerInterval;
+let timeLeft;
+
+document.getElementById("csvFile").addEventListener("change", function(e){
+    const file = e.target.files[0];
+    Papa.parse(file, {
+        header:true,
+        skipEmptyLines:true,
+        complete: function(results){
+            questions = results.data;
+            loadSections();
+        }
+    });
+});
+
+function loadSections(){
+    let sections = [...new Set(questions.map(q=>q.section))];
+    let select = document.getElementById("sectionFilter");
+    select.innerHTML = "<option value='all'>All</option>";
+    sections.forEach(s=>{
+        select.innerHTML += `<option value="${s}">${s}</option>`;
+    });
+}
+
+function startExam(){
+    let section = document.getElementById("sectionFilter").value;
+    filteredQuestions = section=="all" ? questions :
+        questions.filter(q=>q.section===section);
+
+    shuffle(filteredQuestions);
+
+    document.getElementById("examArea").classList.remove("hidden");
+    document.getElementById("submitBtn").classList.remove("hidden");
+
+    let examHTML="";
+    filteredQuestions.forEach((q,i)=>{
+        examHTML+=`<div id="q${i}">
+        <p><b>${i+1}. ${q.questions}</b></p>`;
+
+        for(let j=1;j<=5;j++){
+            if(q["option"+j]){
+                examHTML+=`
+                <label>
+                <input type="radio" name="q${i}" value="${j}">
+                ${q["option"+j]}
+                </label><br>`;
+            }
+        }
+        examHTML+="</div><hr>";
+    });
+
+    document.getElementById("examArea").innerHTML=examHTML;
+
+    startTimer();
+}
+
+function shuffle(array){
+    for(let i=array.length-1;i>0;i--){
+        let j=Math.floor(Math.random()*(i+1));
+        [array[i],array[j]]=[array[j],array[i]];
+    }
+}
+
+function startTimer(){
+    let minutes=document.getElementById("timerInput").value;
+    timeLeft=minutes*60;
+
+    timerInterval=setInterval(()=>{
+        timeLeft--;
+        document.title="Time Left: "+Math.floor(timeLeft/60)+":"+timeLeft%60;
+        if(timeLeft<=0){
+            clearInterval(timerInterval);
+            submitExam();
+        }
+    },1000);
+}
+
+function submitExam(){
+    clearInterval(timerInterval);
+    let score=0;
+
+    filteredQuestions.forEach((q,i)=>{
+        let selected=document.querySelector(`input[name="q${i}"]:checked`);
+        if(selected){
+            userAnswers[i]=selected.value;
+            if(parseInt(selected.value)==parseInt(q.answer)){
+                score++;
+                document.getElementById("q"+i).classList.add("correct");
+            }else{
+                document.getElementById("q"+i).classList.add("wrong");
+            }
+        }
+        document.getElementById("q"+i).innerHTML+=
+        `<p><i>Correct: ${q.answer}</i></p>
+         <p><i>Explanation: ${q.explanation}</i></p>`;
+    });
+
+    document.getElementById("result").innerText=
+        "Score: "+score+" / "+filteredQuestions.length;
+
+    document.getElementById("exportBtn").classList.remove("hidden");
+}
+
+function exportResult(){
+    let csv="Question,Your Answer,Correct\n";
+    filteredQuestions.forEach((q,i)=>{
+        csv+=`"${q.questions}",${userAnswers[i]||""},${q.answer}\n`;
+    });
+
+    let blob=new Blob([csv],{type:"text/csv"});
+    let link=document.createElement("a");
+    link.href=URL.createObjectURL(blob);
+    link.download="result.csv";
+    link.click();
+}
+
+</script>
+
+</body>
+</html>
