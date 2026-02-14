@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Admin Panel</title>
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.3.2/papaparse.min.js"></script>
+<script type="module">
+
+import { db } from './firebase.js';
+import { collection, addDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+let questions=[];
+
+window.uploadCSV=function(e){
+    Papa.parse(e.target.files[0],{
+        header:true,
+        skipEmptyLines:true,
+        complete:function(results){
+            questions=results.data;
+            alert("CSV Loaded");
+        }
+    });
+}
+
+window.publishExam=async function(){
+
+    const exam={
+        name:document.getElementById("name").value,
+        timer:parseInt(document.getElementById("timer").value),
+        negative:parseFloat(document.getElementById("negative").value),
+        questions:questions,
+        createdAt:new Date()
+    };
+
+    await addDoc(collection(db,"exams"),exam);
+
+    alert("Exam Published Live!");
+}
+
+</script>
+</head>
+<body>
+
+<h2>Admin Panel</h2>
+
+Exam Name:<br>
+<input type="text" id="name"><br><br>
+
+Timer (minutes):<br>
+<input type="number" id="timer"><br><br>
+
+Negative Mark:<br>
+<input type="number" id="negative" step="0.1" value="0"><br><br>
+
+Upload CSV:<br>
+<input type="file" onchange="uploadCSV(event)"><br><br>
+
+<button onclick="publishExam()">Publish Exam</button>
+
+</body>
+</html>
