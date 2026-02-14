@@ -1,110 +1,122 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="UTF-8">
-  <title>CSV Exam System</title>
-  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.3.2/papaparse.min.js"></script>
-  <style>
-    body { font-family: Arial; padding:20px; }
-    .wrong { background:#ffdddd; }
-    .correct { background:#ddffdd; }
-    .hidden { display:none; }
-  </style>
-</head>
-<body>
+<meta charset="UTF-8">
+<title>Exam</title>
+<style>
+body{font-family:Arial;padding:20px}
+.correct{background:#ddffdd}
+.wrong{background:#ffdddd}
+</style>
 
-<h2>Admin Panel - Upload CSV</h2>
-<input type="file" id="csvFile" accept=".csv">
-<br><br>
+<script type="module">
 
-<label>Filter by Section:</label>
-<select id="sectionFilter"></select>
+import { db } from './firebase.js';
+import { collection, getDocs } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-<label>Set Timer (minutes):</label>
-<input type="number" id="timerInput" value="10">
-
-<button onclick="startExam()">Start Exam</button>
-
-<hr>
-
-<div id="examArea" class="hidden"></div>
-<button id="submitBtn" class="hidden" onclick="submitExam()">Submit</button>
-
-<h3 id="result"></h3>
-<button id="exportBtn" class="hidden" onclick="exportResult()">Export Result CSV</button>
-
-<script>
-
-let questions = [];
-let filteredQuestions = [];
-let userAnswers = {};
-let timerInterval;
+let examData;
+let userAnswers={};
 let timeLeft;
+let timerInterval;
 
-document.getElementById("csvFile").addEventListener("change", function(e){
-    const file = e.target.files[0];
-    Papa.parse(file, {
-        header:true,
-        skipEmptyLines:true,
-        complete: function(results){
-            questions = results.data;
-            loadSections();
-        }
-    });
-});
+async function loadExam(){
 
-function loadSections(){
-    let sections = [...new Set(questions.map(q=>q.section))];
-    let select = document.getElementById("sectionFilter");
-    select.innerHTML = "<option value='all'>All</option>";
-    sections.forEach(s=>{
-        select.innerHTML += `<option value="${s}">${s}</option>`;
+    const querySnapshot=await getDocs(collection(db,"exams"));
+    querySnapshot.forEach((doc)=>{
+        examData=doc.data();
     });
+
+    if(!examData){
+        document.body.innerHTML="<h2>No Exam Available</h2>";
+        return;
+    }
+
+    document.getElementById("title").innerText=examData.name;
+    renderQuestions();
+    startTimer();
 }
 
-function startExam(){
-    let section = document.getElementById("sectionFilter").value;
-    filteredQuestions = section=="all" ? questions :
-        questions.filter(q=>q.section===section);
+function renderQuestions(){
 
-    shuffle(filteredQuestions);
+    let html="";
 
-    document.getElementById("examArea").classList.remove("hidden");
-    document.getElementById("submitBtn").classList.remove("hidden");
-
-    let examHTML="";
-    filteredQuestions.forEach((q,i)=>{
-        examHTML+=`<div id="q${i}">
+    examData.questions.forEach((q,i)=>{
+        html+=`<div id="q${i}">
         <p><b>${i+1}. ${q.questions}</b></p>`;
 
         for(let j=1;j<=5;j++){
             if(q["option"+j]){
-                examHTML+=`
-                <label>
+                html+=`<label>
                 <input type="radio" name="q${i}" value="${j}">
                 ${q["option"+j]}
                 </label><br>`;
             }
         }
-        examHTML+="</div><hr>";
+
+        html+="</div><hr>";
     });
 
-    document.getElementById("examArea").innerHTML=examHTML;
-
-    startTimer();
-}
-
-function shuffle(array){
-    for(let i=array.length-1;i>0;i--){
-        let j=Math.floor(Math.random()*(i+1));
-        [array[i],array[j]]=[array[j],array[i]];
-    }
+    document.getElementById("examArea").innerHTML=html;
 }
 
 function startTimer(){
-    let minutes=document.getElementById("timerInput").value;
-    timeLeft=minutes*60;
 
+    timeLeft=examData.timer*60;
+
+    timerInterval=setInterval(()=>{
+        timeLeft--;
+        document.getElementById("timer").innerText=
+        "Time Left: "+Math.floor(timeLeft/60)+":"+timeLeft%60;
+
+        if(timeLeft<=0){
+            submitExam();
+        }
+    },1000);
+}
+
+window.submitExam=function(){
+
+    clearInterval(timerInterval);
+
+    let score=0;
+
+    examData.questions.forEach((q,i)=>{
+        let selected=document.querySelector(`input[name="q${i}"]:checked`);
+        if(selected){
+
+            if(parseInt(selected.value)==parseInt(q.answer)){
+                score++;
+                document.getElementById("q"+i).classList.add("correct");
+            }else{
+                score-=examData.negative;
+                document.getElementById("q"+i).classList.add("wrong");
+            }
+        }
+
+        document.getElementById("q"+i).innerHTML+=
+        `<p>Correct: ${q.answer}</p>
+         <p>Explanation: ${q.explanation}</p>`;
+    });
+
+    document.getElementById("result").innerText="Final Score: "+score;
+}
+
+window.onload=loadExam;
+
+</script>
+</head>
+<body>
+
+<h2 id="title"></h2>
+<h3 id="timer"></h3>
+
+<div id="examArea"></div>
+<button onclick="submitExam()">Submit</button>
+
+<h3 id="result"></h3>
+
+</body>
+</html>
     timerInterval=setInterval(()=>{
         timeLeft--;
         document.title="Time Left: "+Math.floor(timeLeft/60)+":"+timeLeft%60;
